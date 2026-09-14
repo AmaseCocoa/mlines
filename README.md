@@ -7,10 +7,10 @@
 go build -o ~/.local/bin/mli .
 ```
 
-`~/.local/bin` を `PATH` に入れておく:
+有効化した script の置き場 (`~/.local/share/mlines/bin`) を `PATH` に入れておく:
 
 ```shell
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.local/share/mlines/bin:$PATH"
 ```
 
 `mli doctor` で `bin` ディレクトリと `PATH` を診断できる。
@@ -86,7 +86,7 @@ mli repo sync cocoa-gists
 | 用途 | 場所 |
 | ---- | ---- |
 | リポジトリ群 | `$XDG_DATA_HOME/mlines/repos/<name>` (既定 `~/.local/share/mlines/repos`) |
-| 有効化先 | `$MLINES_BIN_DIR` または `--bin-dir` (既定 `~/.local/bin`) |
+| 有効化先 | `$MLINES_BIN_DIR` または `--bin-dir` (既定 `~/.local/share/mlines/bin`) |
 
 - `shell_script` は有効化先に symlink が張られる
 - `binary` はダウンロード実体 + `<alias>.mlines.json` (管理メタ) が置かれる

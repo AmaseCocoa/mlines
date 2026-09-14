@@ -21,12 +21,11 @@ func main() {
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   "bin-dir",
-			Usage:  "有効化先ディレクトリ (既定: $MLINES_BIN_DIR または ~/.local/bin)",
+			Usage:  "有効化先ディレクトリ (既定: $MLINES_BIN_DIR または <data>/bin)",
 			EnvVar: "MLINES_BIN_DIR",
 		},
 	}
 	app.Action = func(c *cli.Context) error {
-		// 引数なしは直感的TUIを起動
 		if c.NArg() == 0 {
 			return runTUI(binDirOf(c), "")
 		}

@@ -22,7 +22,8 @@ func reposDir() string {
 }
 
 // defaultBinDir は enable した script のリンク/実体を置くディレクトリを返す。
-// 優先度: --bin-dir フラグ > MLINES_BIN_DIR > ~/.local/bin
+// mlines の管理フォルダ配下 (<data>/bin) を既定とする。
+// 優先度: --bin-dir フラグ > MLINES_BIN_DIR > <data>/bin
 func defaultBinDir(override string) string {
 	if override != "" {
 		return expandPath(override)
@@ -30,8 +31,7 @@ func defaultBinDir(override string) string {
 	if v := os.Getenv("MLINES_BIN_DIR"); v != "" {
 		return expandPath(v)
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "bin")
+	return filepath.Join(dataDir(), "bin")
 }
 
 func expandPath(p string) string {
