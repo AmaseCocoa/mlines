@@ -15,6 +15,7 @@ const (
 	tuiNav tuiMode = iota
 	tuiFilter
 	tuiAlias
+	tuiConfirm
 )
 
 type itemsMsg struct {
@@ -29,19 +30,21 @@ type doneMsg struct {
 }
 
 type tuiModel struct {
-	bin       string
-	items     []ScriptItem
-	filtered  []int
-	cursor    int
-	offset    int
-	input     textinput.Model
-	mode      tuiMode
-	aliasFor  *ScriptItem
-	status    string
-	statusErr bool
-	showHelp  bool
-	width     int
-	height    int
+	bin         string
+	items       []ScriptItem
+	filtered    []int
+	cursor      int
+	offset      int
+	input       textinput.Model
+	mode        tuiMode
+	aliasFor    *ScriptItem
+	confirmText string
+	pendingRepo string
+	status      string
+	statusErr   bool
+	showHelp    bool
+	width       int
+	height      int
 }
 
 var (
@@ -150,7 +153,7 @@ func enableAliasCmd(bin string, it ScriptItem, alias string) tea.Cmd {
 func syncCmd(bin, repo string) tea.Cmd {
 	return func() tea.Msg {
 		if repo == "" {
-			results := syncAllRepos()
+			results := pullAllRepos()
 			ok, ng := 0, 0
 			var msgs []string
 			// 決定的な順序で
@@ -165,19 +168,29 @@ func syncCmd(bin, repo string) tea.Cmd {
 			}
 			s := fmt.Sprintf("sync完了: %d件成功 %d件失敗", ok, ng)
 			if len(msgs) > 0 {
-				s += " (" + strings.Join(msgs, ", ") + ")"
+				s += " (" + strings.Join(msgs, ", ") + ")。! キーで個別に強制リセット可"
 			}
 			return doneMsg{status: s, isErr: ng > 0}
 		}
-		out, err := syncRepo(repo)
+		out, err := pullRepo(repo)
 		if err != nil {
-			return doneMsg{status: fmt.Sprintf("%s: %v", repo, err), isErr: true}
+			return doneMsg{status: fmt.Sprintf("%s: pull失敗 (! キーで強制リセット可): %v", repo, err), isErr: true}
 		}
 		first := strings.SplitN(out, "\n", 2)[0]
 		if first == "" {
 			first = "Already up to date."
 		}
 		return doneMsg{status: fmt.Sprintf("%s: %s", repo, first)}
+	}
+}
+
+func resetCmd(repo string) tea.Cmd {
+	return func() tea.Msg {
+		msg, err := resetRepo(repo)
+		if err != nil {
+			return doneMsg{status: fmt.Sprintf("%s: リセット失敗: %v", repo, err), isErr: true}
+		}
+		return doneMsg{status: msg}
 	}
 }
 
@@ -218,6 +231,8 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateFilter(msg)
 	case tuiAlias:
 		return m.updateAlias(msg)
+	case tuiConfirm:
+		return m.updateConfirm(msg)
 	default:
 		return m.updateNav(msg)
 	}
@@ -279,6 +294,13 @@ func (m tuiModel) updateNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "R":
 			m.setStatus("全リポジトリをsync中...", false)
 			return m, syncCmd(m.bin, "")
+		case "!":
+			if sel := m.selected(); sel != nil {
+				m.mode = tuiConfirm
+				m.pendingRepo = sel.Repo
+				m.confirmText = fmt.Sprintf("%s を強制リセットしますか? ローカルの変更は破棄されます [y/N]", sel.Repo)
+				return m, nil
+			}
 		case "?", "h":
 			m.showHelp = !m.showHelp
 		case "esc":
@@ -342,6 +364,28 @@ func (m tuiModel) updateAlias(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	return m, cmd
+}
+
+func (m tuiModel) updateConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch strings.ToLower(msg.String()) {
+		case "y":
+			repo := m.pendingRepo
+			m.mode = tuiNav
+			m.pendingRepo = ""
+			m.confirmText = ""
+			m.setStatus(repo+" をリセット中...", false)
+			return m, resetCmd(repo)
+		case "n", "esc", "q":
+			m.mode = tuiNav
+			m.pendingRepo = ""
+			m.confirmText = ""
+			m.setStatus("キャンセルしました", false)
+			return m, nil
+		}
+	}
+	return m, nil
 }
 
 func (m *tuiModel) ensureVisible() {
@@ -424,15 +468,17 @@ func (m tuiModel) View() string {
 		b.WriteString("\n" + m.input.View() + tuiHelp.Render("  (enterで有効化 escで取消)") + "\n")
 	} else if m.mode == tuiFilter {
 		b.WriteString("\n" + m.input.View() + tuiHelp.Render("  (enterで確定 escでクリア)") + "\n")
+	} else if m.mode == tuiConfirm {
+		b.WriteString("\n" + tuiErr.Render("! "+m.confirmText) + tuiHelp.Render("  (y:実行 n:取消)") + "\n")
 	} else {
 		b.WriteString("\n")
 	}
 
 	if m.showHelp {
 		b.WriteString(tuiHelp.Render("  ↑↓/jk 移動  space 有効/無効切替  / 絞り込み  a 別名で有効化\n") +
-			tuiHelp.Render("  r このrepoをsync  R 全repoをsync  ? ヘルプ  q 終了") + "\n")
+			tuiHelp.Render("  r このrepoをsync  R 全repoをsync  ! 強制リセット(確認あり)  ? ヘルプ  q 終了") + "\n")
 	} else {
-		b.WriteString(tuiBar.Render("  space:切替 /:絞込 a:別名 r/R:sync ?:ヘルプ q:終了") + "\n")
+		b.WriteString(tuiBar.Render("  space:切替 /:絞込 a:別名 r/R:sync !:リセット ?:ヘルプ q:終了") + "\n")
 	}
 	if m.status != "" {
 		if m.statusErr {

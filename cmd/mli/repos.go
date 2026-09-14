@@ -126,8 +126,8 @@ func removeRepo(name, bin string) error {
 	return nil
 }
 
-// syncRepo は git pull --ff-only で更新する。
-func syncRepo(name string) (string, error) {
+// pullRepo は git pull --ff-only で更新する。
+func pullRepo(name string) (string, error) {
 	r, err := findRepo(name)
 	if err != nil {
 		return "", err
@@ -144,13 +144,62 @@ func syncRepo(name string) (string, error) {
 	return msg, nil
 }
 
-// syncAllRepos は全リポジトリを更新する。結果は名前順。
-func syncAllRepos() map[string]error {
+// pullAllRepos は全リポジトリを pull で更新する。結果は名前順。
+func pullAllRepos() map[string]error {
 	repos, _ := listRepos()
 	results := make(map[string]error, len(repos))
 	for _, r := range repos {
-		_, err := syncRepo(r.Name)
+		_, err := pullRepo(r.Name)
 		results[r.Name] = err
 	}
 	return results
+}
+
+// upstreamRef は追跡ブランチの remote と ref (例: origin, refs/remotes/origin/main) を返す。
+func upstreamRef(repoPath string) (remote, ref string, err error) {
+	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--symbolic-full-name", "@{u}")
+	out, execErr := cmd.Output()
+	sym := strings.TrimSpace(string(out))
+	if execErr != nil || !strings.HasPrefix(sym, "refs/remotes/") {
+		return "", "", fmt.Errorf("upstream が設定されていません (git branch --set-upstream-to で設定してください)")
+	}
+	short := strings.TrimPrefix(sym, "refs/remotes/")
+	parts := strings.SplitN(short, "/", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("upstream の解釈に失敗しました: %s", sym)
+	}
+	return parts[0], sym, nil
+}
+
+func gitHead(repoPath string) string {
+	out, err := exec.Command("git", "-C", repoPath, "rev-parse", "--short", "HEAD").Output()
+	if err != nil {
+		return "?"
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// resetRepo は fetch + reset --hard で upstream に強制的に合わせる。
+// ローカルの変更 (未コミット・独自コミット) は破棄される。呼び出し側で確認すること。
+func resetRepo(name string) (string, error) {
+	r, err := findRepo(name)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(filepath.Join(r.Path, ".git")); err != nil {
+		return "", fmt.Errorf("リポジトリ %q は git 管理ではありません", name)
+	}
+	remote, _, err := upstreamRef(r.Path)
+	if err != nil {
+		return "", err
+	}
+	before := gitHead(r.Path)
+	if out, err := exec.Command("git", "-C", r.Path, "fetch", remote).CombinedOutput(); err != nil {
+		return "", fmt.Errorf("fetch に失敗: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	if out, err := exec.Command("git", "-C", r.Path, "reset", "--hard", "@{u}").CombinedOutput(); err != nil {
+		return "", fmt.Errorf("reset に失敗: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	after := gitHead(r.Path)
+	return fmt.Sprintf("%s: リセットしました (%s -> %s)。ローカルの変更は破棄されました", name, before, after), nil
 }

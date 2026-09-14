@@ -33,6 +33,7 @@ mli tui --filter gi
 | `/` | 絞り込み (enterで確定・escでクリア) |
 | `a` | 別名で有効化 |
 | `r` / `R` | このrepoをsync / 全repoをsync |
+| `!` | このrepoを強制リセット (確認あり) |
 | `?` | ヘルプ表示 |
 | `q` | 終了 |
 
@@ -79,6 +80,15 @@ mli repo list
 mli repo sync-all
 
 mli repo sync cocoa-gists
+```
+
+`pull --ff-only` に失敗した場合 (diverge 等)、確認の上で `fetch + reset --hard` による
+強制リセットを選べる (ローカルの変更は破棄される)。非対話環境や確認なしで
+実行したい場合は `--reset` を付ける:
+
+```shell
+mli repo sync cocoa-gists --reset
+mli repo sync-all --reset
 ```
 
 ## 保存先

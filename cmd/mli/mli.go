@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/urfave/cli"
@@ -109,30 +111,34 @@ func main() {
 					Name:      "sync",
 					Usage:     "リポジトリを更新する (省略時は全件)",
 					ArgsUsage: "[name]",
+					Flags: []cli.Flag{
+						cli.BoolFlag{Name: "reset", Usage: "確認なしで fetch + reset --hard (ローカル変更を破棄)"},
+					},
 					Action: func(c *cli.Context) error {
 						if c.NArg() == 0 {
-							results := syncAllRepos()
-							if len(results) == 0 {
-								fmt.Println("リポジトリ未登録")
-								return nil
+							return syncAllAction(c.Bool("reset"))
+						}
+						name := c.Args().First()
+						if c.Bool("reset") {
+							msg, err := resetRepo(name)
+							if err != nil {
+								return err
 							}
-							failed := 0
-							for name, err := range results {
-								if err != nil {
-									failed++
-									fmt.Printf("%s: 失敗 (%v)\n", name, err)
-								} else {
-									fmt.Printf("%s: OK\n", name)
-								}
-							}
-							if failed > 0 {
-								return fmt.Errorf("%d件のsyncに失敗", failed)
-							}
+							fmt.Println(msg)
 							return nil
 						}
-						out, err := syncRepo(c.Args().First())
+						out, err := pullRepo(name)
 						if err != nil {
-							return err
+							fmt.Printf("%v\n", err)
+							if askReset([]string{name}) {
+								msg, resetErr := resetRepo(name)
+								if resetErr != nil {
+									return resetErr
+								}
+								fmt.Println(msg)
+								return nil
+							}
+							return fmt.Errorf("中断しました (--reset を付けると確認なしでリセットします)")
 						}
 						fmt.Println(out)
 						return nil
@@ -141,25 +147,11 @@ func main() {
 				{
 					Name:  "sync-all",
 					Usage: "全リポジトリを更新する (sync と同等)",
+					Flags: []cli.Flag{
+						cli.BoolFlag{Name: "reset", Usage: "確認なしで fetch + reset --hard (ローカル変更を破棄)"},
+					},
 					Action: func(c *cli.Context) error {
-						results := syncAllRepos()
-						if len(results) == 0 {
-							fmt.Println("リポジトリ未登録")
-							return nil
-						}
-						failed := 0
-						for name, err := range results {
-							if err != nil {
-								failed++
-								fmt.Printf("%s: 失敗 (%v)\n", name, err)
-							} else {
-								fmt.Printf("%s: OK\n", name)
-							}
-						}
-						if failed > 0 {
-							return fmt.Errorf("%d件のsyncに失敗", failed)
-						}
-						return nil
+						return syncAllAction(c.Bool("reset"))
 					},
 				},
 			},
@@ -268,6 +260,94 @@ func main() {
 
 func binDirOf(c *cli.Context) string {
 	return defaultBinDir(c.GlobalString("bin-dir"))
+}
+
+// syncAllAction は全リポジトリを更新する。reset=true なら確認なしで全件リセットする。
+func syncAllAction(reset bool) error {
+	if reset {
+		repos, err := listRepos()
+		if err != nil {
+			return err
+		}
+		if len(repos) == 0 {
+			fmt.Println("リポジトリ未登録")
+			return nil
+		}
+		failed := 0
+		for _, r := range repos {
+			msg, err := resetRepo(r.Name)
+			if err != nil {
+				failed++
+				fmt.Printf("%s: リセット失敗 (%v)\n", r.Name, err)
+			} else {
+				fmt.Println(msg)
+			}
+		}
+		if failed > 0 {
+			return fmt.Errorf("%d件のリセットに失敗", failed)
+		}
+		return nil
+	}
+	results := pullAllRepos()
+	if len(results) == 0 {
+		fmt.Println("リポジトリ未登録")
+		return nil
+	}
+	names := make([]string, 0, len(results))
+	for name := range results {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var failed []string
+	for _, name := range names {
+		if err := results[name]; err != nil {
+			failed = append(failed, name)
+			fmt.Printf("%s: 失敗 (%v)\n", name, err)
+		} else {
+			fmt.Printf("%s: OK\n", name)
+		}
+	}
+	if len(failed) > 0 {
+		if askReset(failed) {
+			resetFailed := 0
+			for _, name := range failed {
+				msg, err := resetRepo(name)
+				if err != nil {
+					resetFailed++
+					fmt.Printf("%s: リセット失敗 (%v)\n", name, err)
+				} else {
+					fmt.Println(msg)
+				}
+			}
+			if resetFailed > 0 {
+				return fmt.Errorf("%d件のリセットに失敗", resetFailed)
+			}
+			return nil
+		}
+		return fmt.Errorf("%d件のsyncに失敗 (--reset を付けると確認なしでリセットします)", len(failed))
+	}
+	return nil
+}
+
+// askReset は pull 失敗時に強制リセットの確認を取る。非TTYでは確認せず false を返す。
+func askReset(names []string) bool {
+	if !isTerminal() {
+		fmt.Println("非対話環境のためリセットしません (--reset を付けると確認なしでリセットします)")
+		return false
+	}
+	fmt.Printf("警告: 強制リセットすると %s のローカル変更 (未コミット・独自コミット) は破棄されます。\n",
+		strings.Join(names, ", "))
+	fmt.Print("fetch + reset --hard で upstream に合わせますか? [y/N]: ")
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true
+	}
+	return false
 }
 
 func isTerminal() bool {
