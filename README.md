@@ -4,7 +4,7 @@
 ## Install
 
 ```shell
-go build -o ~/.local/bin/mli .
+go install github.com/AmaseCocoa/mlines/cmd/mli@latest
 ```
 
 有効化した script の置き場 (`~/.local/share/mlines/bin`) を `PATH` に入れておく:
@@ -140,6 +140,6 @@ mlines.json:
 }
 ```
 - registryのファイルはbinキーの中身を外部化しただけのフォーマットになる想定
-- typeがshell_scriptの場合は念のために厳密なファイル自体のチェックも行う (簡易的なマルウェア対策: `sha256` 指定時は enable 時に検証し、不一致なら中断する)
+- typeがshell_scriptの場合は念のために厳密なファイル自体のチェックも行う
 - binary の `hash` 指定時も同様にダウンロード検証を行い、不一致なら中断する
 - JSON Schema は `schema/mlines.schema.json` (`mli schema` で出力も可能)
