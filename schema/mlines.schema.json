@@ -1,0 +1,89 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://github.com/AmaseCocoa/mlines/schema/mlines.schema.json",
+    "title": "mlines repository manifest",
+    "description": "mlines.json - scriptリポジトリのマニフェスト",
+    "type": "object",
+    "required": ["scripts"],
+    "properties": {
+        "description": {
+            "type": "string",
+            "description": "リポジトリの説明"
+        },
+        "script_root": {
+            "type": "string",
+            "default": "./scripts",
+            "description": "shell_scriptの起点ディレクトリ (リポジトリ相対)"
+        },
+        "scripts": {
+            "type": "object",
+            "minProperties": 1,
+            "patternProperties": {
+                "^[A-Za-z0-9._-]+$": {
+                    "type": "object",
+                    "required": ["type"],
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": ["shell_script", "binary"]
+                        },
+                        "description": {
+                            "type": "string"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "shell_script用: script_rootからの相対パス"
+                        },
+                        "sha256": {
+                            "type": "string",
+                            "pattern": "^[0-9a-fA-F]{64}$",
+                            "description": "shell_script用 (任意・推奨): ファイル内容のSHA-256。enable/sync時に検証される"
+                        },
+                        "bin": {
+                            "type": "object",
+                            "description": "binary用 (bin/registryのどちらか必須): プラットフォーム別アセット",
+                            "patternProperties": {
+                                "^[a-z0-9]+-[a-z0-9_]+$": {
+                                    "type": "object",
+                                    "required": ["file"],
+                                    "properties": {
+                                        "file": {
+                                            "type": "string",
+                                            "format": "uri",
+                                            "description": "ダウンロードURL (https/http/file)"
+                                        },
+                                        "hash": {
+                                            "type": "string",
+                                            "pattern": "^[0-9a-fA-F]{64}$",
+                                            "description": "バイナリのSHA-256 (任意・推奨)。指定時は検証に失敗すると導入を中断する"
+                                        }
+                                    },
+                                    "additionalProperties": false
+                                }
+                            },
+                            "minProperties": 1
+                        },
+                        "registry": {
+                            "type": "string",
+                            "format": "uri",
+                            "description": "binary用 (bin/registryのどちらか必須): binマップを外部化したJSONのURL"
+                        }
+                    },
+                    "allOf": [
+                        {
+                            "if": { "properties": { "type": { "const": "shell_script" } } },
+                            "then": { "required": ["path"] }
+                        },
+                        {
+                            "if": { "properties": { "type": { "const": "binary" } } },
+                            "then": { "anyOf": [{ "required": ["bin"] }, { "required": ["registry"] }] }
+                        }
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    "additionalProperties": false
+}
