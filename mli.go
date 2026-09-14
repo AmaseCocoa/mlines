@@ -242,6 +242,16 @@ func main() {
 			},
 		},
 		{
+			Name:  "paths",
+			Usage: "mlines の保存先 (data/repos/bin) を表示する",
+			Action: func(c *cli.Context) error {
+				fmt.Printf("data:  %s\n", dataDir())
+				fmt.Printf("repos: %s\n", reposDir())
+				fmt.Printf("bin:   %s\n", binDirOf(c))
+				return nil
+			},
+		},
+		{
 			Name:  "doctor",
 			Usage: "bin ディレクトリ・PATH・孤児リンクを診断する",
 			Action: func(c *cli.Context) error {

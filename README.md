@@ -83,10 +83,18 @@ mli repo sync cocoa-gists
 
 ## 保存先
 
+mli関連のファイルはとにかく `~/.local/share/mlines` 以下に集約される
+(`XDG_DATA_HOME` の影響は受けない。明示的に変える場合のみ `MLINES_DATA_DIR` で上書き可)。
+
 | 用途 | 場所 |
 | ---- | ---- |
-| リポジトリ群 | `$XDG_DATA_HOME/mlines/repos/<name>` (既定 `~/.local/share/mlines/repos`) |
-| 有効化先 | `$MLINES_BIN_DIR` または `--bin-dir` (既定 `~/.local/share/mlines/bin`) |
+| 集約ルート | `~/.local/share/mlines` (`$MLINES_DATA_DIR` で上書き可) |
+| リポジトリ群 | `<data>/repos/<name>` |
+| 有効化先 | `<data>/bin` (`$MLINES_BIN_DIR` または `--bin-dir` で上書き可) |
+
+```shell
+mli paths   # 実際の保存先を表示
+```
 
 - `shell_script` は有効化先に symlink が張られる
 - `binary` はダウンロード実体 + `<alias>.mlines.json` (管理メタ) が置かれる

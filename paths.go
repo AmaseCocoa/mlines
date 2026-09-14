@@ -6,11 +6,12 @@ import (
 	"strings"
 )
 
-// dataDir はリポジトリ群の保存先を返す。
-// XDG_DATA_HOME/mlines を優先し、なければ ~/.local/share/mlines を使う。
+// dataDir は mlines 関連ファイルの集約先を返す。
+// とにかく ~/.local/share/mlines 以下に集約する (XDG_DATA_HOME の影響は受けない)。
+// 明示的に変えたい場合のみ MLINES_DATA_DIR で上書きできる。
 func dataDir() string {
-	if v := os.Getenv("XDG_DATA_HOME"); v != "" {
-		return filepath.Join(v, "mlines")
+	if v := os.Getenv("MLINES_DATA_DIR"); v != "" {
+		return expandPath(v)
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".local", "share", "mlines")
